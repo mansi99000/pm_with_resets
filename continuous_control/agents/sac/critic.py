@@ -8,7 +8,8 @@ from continuous_control.networks.common import InfoDict, Model, Params, PRNGKey,
 
 
 def target_update(critic: Model, target_critic: Model, tau: float) -> Model:
-    new_target_params = jax.tree_multimap(
+    new_target_params = jax.tree_map(
+    # new_target_params = jax.tree_multimap(
         lambda p, tp: p * tau + tp * (1 - tau), critic.params,
         target_critic.params)
 

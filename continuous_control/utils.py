@@ -21,7 +21,8 @@ def make_env(env_name: str,
              gray_scale: bool = False,
              flatten: bool = True) -> gym.Env:
     # Check if the env is in gym.
-    all_envs = gym.envs.registry.all()
+    #all_envs = gym.envs.registry.all()
+    all_envs = gym.envs.registry.values()
     env_ids = [env_spec.id for env_spec in all_envs]
 
     if env_name in env_ids:

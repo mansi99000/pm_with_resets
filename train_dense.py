@@ -1,6 +1,6 @@
 import os
 import random
-
+import wandb
 import numpy as np
 import tqdm
 from absl import app, flags
@@ -37,6 +37,17 @@ config_flags.DEFINE_config_file(
 
 def main(_):
     os.makedirs(FLAGS.save_dir, exist_ok=True)
+    wandb.login()
+    # Initialize WandB
+    wandb.init(
+        project="M_1",
+        name=f"Test_{FLAGS.env_name}_seed{FLAGS.seed}",
+        config=FLAGS.flag_values_dict()
+    )
+    # Define metric to align all logs on the same x-axis
+    wandb.define_metric("timestep")  # x-axis
+    wandb.define_metric("eval_return", step_metric="timestep")
+    wandb.define_metric("reset_event", step_metric="timestep")  # Marker
 
     if FLAGS.save_video:
         video_train_folder = os.path.join(FLAGS.save_dir, 'video', 'train')
@@ -97,19 +108,25 @@ def main(_):
 
         if i % FLAGS.eval_interval == 0:
             eval_stats = evaluate(agent, eval_env, FLAGS.eval_episodes)
-
+            #
+            eval_return = eval_stats['return']
+            timestep = info['total']['timesteps']
+            #
             eval_returns.append(
                 (info['total']['timesteps'], eval_stats['return']))
             np.savetxt(os.path.join(FLAGS.save_dir, f'{FLAGS.seed}.txt'),
                        eval_returns,
                        fmt=['%d', '%.1f'])
-            
+            wandb.log({'timestep': timestep, 'eval_return': eval_return})
         if FLAGS.resets and i % FLAGS.reset_interval == 0:
             # create a completely new agent
             agent = SACLearner(FLAGS.seed + i,
                                env.observation_space.sample()[np.newaxis],
                                env.action_space.sample()[np.newaxis], **kwargs)
+            wandb.log({"timestep": i, "reset_event": 1})
 
-
+    # Finish WandB run
+    wandb.finish()
+    
 if __name__ == '__main__':
     app.run(main)
