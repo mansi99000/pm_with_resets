@@ -6,7 +6,7 @@ This repository contains a JAX implementation of the resetting mechanism from th
 
 by [Evgenii Nikishin](https://evgenii-nikishin.github.io/)\*, [Max Schwarzer](https://scholar.google.com/citations?user=YmWRSvgAAAAJ)\*, [Pierluca D'Oro](https://proceduralia.github.io/)\*, [Pierre-Luc Bacon](https://pierrelucbacon.com/), and [Aaron Courville](https://scholar.google.com/citations?user=km6CP8cAAAAJ).
 
-
+Test commit Mansi
 # Summary
 
 The paper identifies a common flaw of deep RL algorithms called *the primacy bias*, a tendency to overfit initial experiences that damages the rest of the learning process.
