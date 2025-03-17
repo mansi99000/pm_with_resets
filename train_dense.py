@@ -28,6 +28,10 @@ flags.DEFINE_integer('reset_interval', int(2e5), 'Periodicity of resets.')
 flags.DEFINE_boolean('resets', False, 'Periodically reset the agent networks.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_video', False, 'Save videos during evaluation.')
+
+flags.DEFINE_integer('agent_warmup_steps', 35000, 'Number of steps to pretrain new agent before swapping.')
+
+
 config_flags.DEFINE_config_file(
     'config',
     'configs/sac.py',
@@ -41,7 +45,7 @@ def main(_):
     # Initialize WandB
     wandb.init(
         project="M_1",
-        name=f"Test_{FLAGS.env_name}_seed{FLAGS.seed}",
+        name=f"Test_twoNetworks_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
@@ -80,6 +84,10 @@ def main(_):
 
     eval_returns = []
     observation, done = env.reset(), False
+
+    new_agent = None  
+    new_agent_steps = 0  
+
     for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),
                        smoothing=0.1,
                        disable=not FLAGS.tqdm):
@@ -120,10 +128,25 @@ def main(_):
             wandb.log({'timestep': timestep, 'eval_return': eval_return})
         if FLAGS.resets and i % FLAGS.reset_interval == 0:
             # create a completely new agent
-            agent = SACLearner(FLAGS.seed + i,
+            new_agent = SACLearner(FLAGS.seed + i,
                                env.observation_space.sample()[np.newaxis],
                                env.action_space.sample()[np.newaxis], **kwargs)
+                               
+            new_agent_steps = 0
+            # create agent 2 and mark active=True
             wandb.log({"timestep": i, "reset_event": 1})
+
+        if new_agent is not None and new_agent_steps < FLAGS.agent_warmup_steps:
+            for _ in range(updates_per_step):
+                batch = replay_buffer.sample(FLAGS.batch_size)
+                new_agent.update(batch)
+
+            new_agent_steps += 1
+
+            # After 10k updates, swap agents
+            if new_agent_steps >= FLAGS.agent_warmup_steps: # TODO create a variable
+                agent = new_agent
+                new_agent = None  # Reset new agent tracker
 
     # Finish WandB run
     wandb.finish()
