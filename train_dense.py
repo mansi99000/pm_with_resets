@@ -16,7 +16,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('exp', '', 'Experiment description (not actually used).')
 flags.DEFINE_string('env_name', 'quadruped-run', 'Environment name.')
 flags.DEFINE_string('save_dir', './out/', 'Logging dir.')
-flags.DEFINE_integer('seed', 0, 'Random seed.')
+flags.DEFINE_integer('seed', 40, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10,
                      'Number of episodes used for evaluation.')
 flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
@@ -45,7 +45,7 @@ def main(_):
     # Initialize WandB
     wandb.init(
         project="M_1",
-        name=f"Test_twoNetworks_{FLAGS.env_name}_seed{FLAGS.seed}",
+        name=f"Test_twoNetworks_35kstepsForNewAgent{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
