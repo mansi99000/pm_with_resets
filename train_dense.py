@@ -20,7 +20,7 @@ flags.DEFINE_string('save_dir', './out/', 'Logging dir.')
 flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10,
                     'Number of episodes used for evaluation.')
-flags.DEFINE_integer('eval_interval', 1000, 'Eval interval.') # 5000
+flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(2e6), 'Number of training steps.')
 flags.DEFINE_integer('start_training', int(1e4),
@@ -112,12 +112,13 @@ def distill(teacher_agent, env, kwargs, replay_buffer_size):
     return student_agent
 
 def main(_):
+    num_distill = 0
     os.makedirs(FLAGS.save_dir, exist_ok=True)
     wandb.login()
     # Initialize WandB
     wandb.init(
-        project="M_1",
-        name=f"{FLAGS.job_id}_Test_3_20_{FLAGS.env_name}_seed{FLAGS.seed}",
+        project="Basic_exps",
+        name=f"{FLAGS.job_id}_Distill_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
@@ -201,7 +202,8 @@ def main(_):
             #                 env.action_space.sample()[np.newaxis], **kwargs)
 
             agent = distill(agent, env, kwargs, replay_buffer_size)
-            wandb.log({"timestep": i, "reset_event": 1})
+            num_distill += 1
+            wandb.log({"timestep": i, "distill_event": num_distill})
 
     # Finish WandB run
     wandb.finish()
