@@ -28,6 +28,8 @@ flags.DEFINE_integer('reset_interval', int(2e5), 'Periodicity of resets.')
 flags.DEFINE_boolean('resets', False, 'Periodically reset the agent networks.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_video', False, 'Save videos during evaluation.')
+flags.DEFINE_string('job_id', os.getenv("SLURM_JOB_ID", "unknown"), '')
+
 config_flags.DEFINE_config_file(
     'config',
     'configs/sac.py',
@@ -36,12 +38,13 @@ config_flags.DEFINE_config_file(
 
 
 def main(_):
+    num_reset = 0
     os.makedirs(FLAGS.save_dir, exist_ok=True)
     wandb.login()
     # Initialize WandB
     wandb.init(
-        project="M_1",
-        name=f"Test_{FLAGS.env_name}_seed{FLAGS.seed}",
+        project="Basic_exps",
+        name=f"{FLAGS.job_id}_Reset_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
@@ -123,7 +126,8 @@ def main(_):
             agent = SACLearner(FLAGS.seed + i,
                                env.observation_space.sample()[np.newaxis],
                                env.action_space.sample()[np.newaxis], **kwargs)
-            wandb.log({"timestep": i, "reset_event": 1})
+            num_reset += 1
+            wandb.log({"timestep": i, "reset_event": num_reset})
 
     # Finish WandB run
     wandb.finish()
