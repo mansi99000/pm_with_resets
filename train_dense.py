@@ -30,7 +30,7 @@ flags.DEFINE_boolean('resets', False, 'Periodically reset the agent networks.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_video', False, 'Save videos during evaluation.')
 
-flags.DEFINE_integer('distill_steps', 1000, '_') # 5000 10k, 25k
+flags.DEFINE_integer('distill_steps', 25000, '_') # 5000 10k, 25k
 flags.DEFINE_integer('lambda_decay_rate', 1000, '_')
 flags.DEFINE_float('tau', 0.005, '')
 flags.DEFINE_string('job_id', os.getenv("SLURM_JOB_ID", "unknown"), '_')
@@ -43,7 +43,6 @@ config_flags.DEFINE_config_file(
 
 def collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size, num_samples=50000):
     """Collects expert data by running the SAC teacher policy in the environment."""
-    expert_buffer_size = replay_buffer_size
     expert_buffer = ReplayBuffer(env.observation_space, env.action_space.shape[0], num_samples)
     
     observation, done = env.reset(), False
@@ -51,7 +50,10 @@ def collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size, num_samp
         action = teacher_agent.sample_actions(observation)  # Teacher selects action
         next_observation, reward, done, info = env.step(action)
 
-        mask = 1.0 if not done or 'TimeLimit.truncated' in info else 0.0
+        if not done or 'TimeLimit.truncated' in info:
+            mask = 1.0
+        else:
+            mask = 0.0
         expert_buffer.insert(observation, action, reward, mask, float(done), next_observation)
         observation = next_observation
 
@@ -61,19 +63,21 @@ def collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size, num_samp
     return expert_buffer
 
 
-def distill(teacher_agent, env, kwargs, replay_buffer_size):
+def distill(teacher_agent, env, kwargs, replay_buffer_size, replay_buffer):
     # Create student agent using SACLearner
     student_agent = SACLearner(
-        FLAGS.seed + 1000,  # Ensure a different seed
+        FLAGS.seed + 1000,  # Ensure a different seed # TODO What happned if we keep the same seed?
         env.observation_space.sample()[np.newaxis],
         env.action_space.sample()[np.newaxis],
         **kwargs
     )
-    expert_buffer = collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size)
+    # 
+    # expert_buffer = collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size)
+
     kl_losses = []
     for step in range(FLAGS.distill_steps):
         # Sample batch from the replay buffer
-        batch = expert_buffer.sample(FLAGS.batch_size)  # TODO replace with batch_size
+        batch = replay_buffer.sample(FLAGS.batch_size)  # TODO replace with batch_size
         states, actions, rewards, next_states, dones = batch
         
         # === Actor Distillation (KL Divergence Loss) ===
@@ -118,7 +122,7 @@ def main(_):
     # Initialize WandB
     wandb.init(
         project="Basic_exps",
-        name=f"{FLAGS.job_id}_Distill_{FLAGS.env_name}_seed{FLAGS.seed}",
+        name=f"{FLAGS.job_id}_Distill_regRB_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
@@ -201,7 +205,7 @@ def main(_):
             #                 env.observation_space.sample()[np.newaxis],
             #                 env.action_space.sample()[np.newaxis], **kwargs)
 
-            agent = distill(agent, env, kwargs, replay_buffer_size)
+            agent = distill(agent, env, kwargs, replay_buffer_size, replay_buffer)
             num_distill += 1
             wandb.log({"timestep": i, "distill_event": num_distill})
 
