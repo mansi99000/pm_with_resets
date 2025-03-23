@@ -19,7 +19,7 @@ flags.DEFINE_string('save_dir', './out/', 'Logging dir.')
 flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10,
                      'Number of episodes used for evaluation.')
-flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
+flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.') # 5000
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(2e6), 'Number of training steps.')
 flags.DEFINE_integer('start_training', int(1e4),
@@ -44,7 +44,7 @@ def main(_):
     # Initialize WandB
     wandb.init(
         project="Basic_exps",
-        name=f"{FLAGS.job_id}_Reset_{FLAGS.env_name}_seed{FLAGS.seed}",
+        name=f"{FLAGS.job_id}_NOReset_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
