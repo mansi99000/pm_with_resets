@@ -63,7 +63,7 @@ def collect_expert_data(teacher_agent, env, kwargs, replay_buffer_size, num_samp
     return expert_buffer
 
 
-def distill(teacher_agent, env, kwargs, replay_buffer_size, replay_buffer):
+def distill(teacher_agent, env, kwargs, replay_buffer_size, replay_buffer, i):
     # Create student agent using SACLearner
     student_agent = SACLearner(
         FLAGS.seed + 1000,  # Ensure a different seed # TODO What happned if we keep the same seed?
@@ -90,16 +90,32 @@ def distill(teacher_agent, env, kwargs, replay_buffer_size, replay_buffer):
         student_actions = student_agent.sample_actions(states)
         student_dist = student_agent.actor.apply({'params': student_agent.actor.params}, states)
         student_log_probs = student_dist.log_prob(student_actions)
+
+        analytical_kl_div = jnp.mean(teacher_dist.kl_divergence(student_dist))
+
         
         # Compute KL divergence loss
         epsilon = 1e-8
-        kl_loss = jnp.mean(teacher_log_probs * (jnp.log(teacher_log_probs + epsilon) - jnp.log(student_log_probs + epsilon)))      
+        #kl_loss = jnp.mean(teacher_log_probs * (jnp.log(teacher_log_probs + epsilon) - jnp.log(student_log_probs + epsilon)))   
+        kl_loss = jnp.mean(teacher_log_probs - student_log_probs)
+   
         kl_losses.append(kl_loss)
 
         if step % 100 == 0:
             print(f"Step {step}: KL Loss = {kl_loss}")
             # wandb.log({'distill_step': step, 'kl_loss': kl_loss}) 
-            wandb.log({'distill_step': step + FLAGS.reset_interval, 'kl_loss': float(kl_loss)})
+            # wandb.log({'distill_step': step + FLAGS.reset_interval, 'kl_loss': float(kl_loss)})
+            wandb.log({'timestep': i + step, 'kl_loss': float(kl_loss)})
+            wandb.log({'timestep': i + step, 'ana_kl_div': float(kl_loss)})
+
+        # layer-wise parameter difference printouts during distillation, helping you verify 
+        # that the student is actually changing over time and not stuck
+        if step % 500 == 0:
+            for key in teacher_agent.actor.params.keys():
+                t = jnp.ravel(teacher_agent.actor.params[key])
+                s = jnp.ravel(student_agent.actor.params[key])
+                diff = jnp.linalg.norm(t - s)
+                print(f"[Step {step}] Param L2 diff for layer {key}: {diff:.4f}")
 
 
         # Perform SAC update on student agent (Actor and Critic updates handled inside)
@@ -205,7 +221,7 @@ def main(_):
             #                 env.observation_space.sample()[np.newaxis],
             #                 env.action_space.sample()[np.newaxis], **kwargs)
 
-            agent = distill(agent, env, kwargs, replay_buffer_size, replay_buffer)
+            agent = distill(agent, env, kwargs, replay_buffer_size, replay_buffer, i)
             num_distill += 1
             wandb.log({"timestep": i, "distill_event": num_distill})
 
