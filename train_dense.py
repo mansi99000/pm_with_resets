@@ -3,13 +3,14 @@ import random
 import wandb
 import numpy as np
 import tqdm
+import pdb
 from absl import app, flags
 from ml_collections import config_flags
 
 from continuous_control.agents import SACLearner
 from continuous_control.datasets import ReplayBuffer
 from continuous_control.evaluation import evaluate
-from continuous_control.utils import make_env
+from continuous_control.utils import make_env, save_agent, load_agent
 
 FLAGS = flags.FLAGS
 
@@ -19,7 +20,7 @@ flags.DEFINE_string('save_dir', './out/', 'Logging dir.')
 flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10,
                      'Number of episodes used for evaluation.')
-flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
+flags.DEFINE_integer('eval_interval', 100, 'Eval interval.') #5000
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(2e6), 'Number of training steps.')
 flags.DEFINE_integer('start_training', int(1e4),
@@ -28,6 +29,11 @@ flags.DEFINE_integer('reset_interval', int(2e5), 'Periodicity of resets.')
 flags.DEFINE_boolean('resets', False, 'Periodically reset the agent networks.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_video', False, 'Save videos during evaluation.')
+
+flags.DEFINE_integer('save_agent_at', -1, 'Save agent at specific timestep. -1 to disable.')
+flags.DEFINE_integer('load_agent_step', -1, 'If > 0, load agent saved at this timestep.')
+flags.DEFINE_string('job_id', os.getenv("SLURM_JOB_ID", "unknown"), '')
+
 config_flags.DEFINE_config_file(
     'config',
     'configs/sac.py',
@@ -40,8 +46,8 @@ def main(_):
     wandb.login()
     # Initialize WandB
     wandb.init(
-        project="M_1",
-        name=f"Test_{FLAGS.env_name}_seed{FLAGS.seed}",
+        project="M_2",
+        name=f"{FLAGS.job_id}_Test_{FLAGS.env_name}_seed{FLAGS.seed}",
         config=FLAGS.flag_values_dict()
     )
     # Define metric to align all logs on the same x-axis
@@ -77,12 +83,27 @@ def main(_):
     action_dim = env.action_space.shape[0]
     replay_buffer = ReplayBuffer(env.observation_space, action_dim,
                                  replay_buffer_size or FLAGS.max_steps)
+    
+    start_step = 1
+    if FLAGS.load_agent_step > 0:
+        start_step = FLAGS.load_agent_step
+        load_path = os.path.join(FLAGS.save_dir, f'agent_step_{FLAGS.load_agent_step}')
+        agent = load_agent(load_path,
+                        SACLearner,
+                        seed=FLAGS.seed,
+                        observations=env.observation_space.sample()[np.newaxis],
+                        actions=env.action_space.sample()[np.newaxis],
+                        **kwargs)
+        replay_buffer.load(os.path.join(load_path, 'buffer.pkl')) # will the 4 replay buffers load? Check when you run teh experiment. 
+
 
     eval_returns = []
     observation, done = env.reset(), False
-    for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),
+    for i in tqdm.tqdm(range(start_step, FLAGS.max_steps + 1),
                        smoothing=0.1,
                        disable=not FLAGS.tqdm):
+        timestep = i
+        # pdb.set_trace()
         if i < FLAGS.start_training:
             action = env.action_space.sample()
         else:
@@ -117,13 +138,19 @@ def main(_):
             np.savetxt(os.path.join(FLAGS.save_dir, f'{FLAGS.seed}.txt'),
                        eval_returns,
                        fmt=['%d', '%.1f'])
-            wandb.log({'timestep': timestep, 'eval_return': eval_return})
+            wandb.log({'timestep': i, 'eval_return': eval_return})
+
         if FLAGS.resets and i % FLAGS.reset_interval == 0:
             # create a completely new agent
             agent = SACLearner(FLAGS.seed + i,
                                env.observation_space.sample()[np.newaxis],
                                env.action_space.sample()[np.newaxis], **kwargs)
             wandb.log({"timestep": i, "reset_event": 1})
+
+        if i == FLAGS.save_agent_at:
+            save_path = os.path.join(FLAGS.save_dir, f'agent_step_{i}')
+            save_agent(agent, save_path)
+            replay_buffer.save(os.path.join(save_path, 'buffer.pkl'))
 
     # Finish WandB run
     wandb.finish()
