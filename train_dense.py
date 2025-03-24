@@ -21,9 +21,7 @@ flags.DEFINE_string('save_dir', './out/', 'Logging dir.')
 flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10,
                      'Number of episodes used for evaluation.')
-flags.DEFINE_integer('eval_interval', 100, 'Eval interval.') #5000
-                    'Number of episodes used for evaluation.')
-flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
+flags.DEFINE_integer('eval_interval', 100, 'Eval interval.')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(2e6), 'Number of training steps.')
 flags.DEFINE_integer('start_training', int(1e4),
@@ -41,7 +39,6 @@ flags.DEFINE_string('job_id', os.getenv("SLURM_JOB_ID", "unknown"), '_')
 
 flags.DEFINE_integer('save_agent_at', -1, 'Save agent at specific timestep. -1 to disable.')
 flags.DEFINE_integer('load_agent_step', -1, 'If > 0, load agent saved at this timestep.')
-flags.DEFINE_string('job_id', os.getenv("SLURM_JOB_ID", "unknown"), '')
 
 config_flags.DEFINE_config_file(
     'config',
@@ -183,8 +180,13 @@ def main(_):
     replay_buffer = ReplayBuffer(env.observation_space, action_dim,
                                  replay_buffer_size or FLAGS.max_steps)
     
+
+    eval_returns = []
+    observation, done = env.reset(), False
     start_step = 1
     if FLAGS.load_agent_step > 0:
+        # pdb.set_trace()
+        print(f"[DEBUG] Replay buffer size: {replay_buffer.size}")
         start_step = FLAGS.load_agent_step
         load_path = os.path.join(FLAGS.save_dir, f'agent_step_{FLAGS.load_agent_step}')
         agent = load_agent(load_path,
@@ -194,15 +196,13 @@ def main(_):
                         actions=env.action_space.sample()[np.newaxis],
                         **kwargs)
         replay_buffer.load(os.path.join(load_path, 'buffer.pkl')) # will the 4 replay buffers load? Check when you run teh experiment. 
-
-
-    eval_returns = []
-    observation, done = env.reset(), False
+        print(f"[DEBUG] Loaded replay buffer size: {replay_buffer.size}")
+       
+    # pdb.set_trace()
     for i in tqdm.tqdm(range(start_step, FLAGS.max_steps + 1),
                     smoothing=0.1,
                     disable=not FLAGS.tqdm):
         timestep = i
-        # pdb.set_trace()
         if i < FLAGS.start_training:
             action = env.action_space.sample()
         else:
@@ -225,15 +225,19 @@ def main(_):
             for _ in range(updates_per_step):
                 batch = replay_buffer.sample(FLAGS.batch_size)
                 agent.update(batch)
+            info = agent.update(batch)
+            print("[Step %d] Critic Loss: %.4f | Actor Entropy: %.4f | Alpha: %.4f" % (
+                agent.step, info['critic_loss'], info['entropy'], info['temperature']
+            ))
 
         if i % FLAGS.eval_interval == 0:
             eval_stats = evaluate(agent, eval_env, FLAGS.eval_episodes)
             #
             eval_return = eval_stats['return']
-            timestep = info['total']['timesteps']
+            timestep = i
             #
             eval_returns.append(
-                (info['total']['timesteps'], eval_stats['return']))
+                (timestep, eval_return))
             np.savetxt(os.path.join(FLAGS.save_dir, f'{FLAGS.seed}.txt'),
                     eval_returns,
                     fmt=['%d', '%.1f'])

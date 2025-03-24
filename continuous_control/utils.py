@@ -110,31 +110,62 @@ def save_agent(agent, path: str):
 
     print(f"✅ Agent saved at {path}/agent.pkl")
 
+# def load_agent(path: str, agent_class, **init_kwargs):
+#     with open(os.path.join(path, 'agent.pkl'), 'rb') as f:
+#         data = pickle.load(f)
+
+#     agent = agent_class(**init_kwargs)
+
+#     agent.actor = agent.actor.replace(
+#         params=data['actor']['params'],
+#         opt_state=data['actor']['opt_state']
+#     )
+
+#     agent.critic = agent.critic.replace(
+#         params=data['critic']['params'],
+#         opt_state=data['critic']['opt_state']
+#     )
+
+#     agent.target_critic = agent.target_critic.replace(
+#         params=data['target_critic']['params']
+#     )
+
+#     agent.temp = agent.temp.replace(
+#         params=data['temp']['params'],
+#         opt_state=data['temp']['opt_state']
+#     )
+
+#     agent.rng = data['rng']
+#     agent.step = data['step']
+
+#     print(f"✅ Agent loaded from {path}/agent.pkl")
+#     return agent
+
 def load_agent(path: str, agent_class, **init_kwargs):
     with open(os.path.join(path, 'agent.pkl'), 'rb') as f:
         data = pickle.load(f)
 
+    # Step 1: Initialize agent fully, including tx (optimizers)
     agent = agent_class(**init_kwargs)
 
+    # Step 2: Replace all model states (params + opt_state)
     agent.actor = agent.actor.replace(
         params=data['actor']['params'],
         opt_state=data['actor']['opt_state']
     )
-
     agent.critic = agent.critic.replace(
         params=data['critic']['params'],
         opt_state=data['critic']['opt_state']
     )
-
     agent.target_critic = agent.target_critic.replace(
         params=data['target_critic']['params']
     )
-
     agent.temp = agent.temp.replace(
         params=data['temp']['params'],
         opt_state=data['temp']['opt_state']
     )
 
+    # Step 3: Restore RNG + training step
     agent.rng = data['rng']
     agent.step = data['step']
 
